@@ -1,0 +1,199 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulazione Tassazione Attività (Regione Puglia)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 40px;
+      background-color: #f4f4f4;
+    }
+    .simulatore-irpef-2025 {
+      background: #fff;
+      padding: 30px;
+      border-radius: 10px;
+      max-width: 800px;
+      margin: auto;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #2e3c55;
+    }
+    label, input, select, button {
+      display: block;
+      width: 100%;
+      margin-bottom: 15px;
+      font-size: 1rem;
+    }
+    input, select {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      background-color: #2e3c55;
+      color: #fff;
+      padding: 12px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #1d273a;
+    }
+    .risultato {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #2e3c55;
+    }
+    canvas {
+      margin-top: 30px;
+    }
+    .box {
+      margin-top: 40px;
+      padding: 15px;
+      background-color: #e8f0fe;
+      border-left: 5px solid #4e73df;
+    }
+  </style>
+</head>
+<body>
+  <div class="simulatore-irpef-2025">
+    <h2>Simulazione Tassazione Attività (Regione Puglia)</h2>
+    <p style="font-size: 0.95rem; color: #555;">
+      Inserisci il reddito imponibile fiscale e quello previdenziale per stimare la tassazione complessiva, confrontandola con l’ipotesi di adesione al concordato biennale (flat tax 15%). Valori aggiornati al 2025.
+    </p>
+
+    <label for="reddito-imponibile">Reddito Imponibile Fiscale (€):</label>
+    <input type="number" id="reddito-imponibile" placeholder="Es. 35000" />
+
+    <label for="reddito-inps">Reddito Imponibile INPS (€):</label>
+    <input type="number" id="reddito-inps" placeholder="Es. 28000" />
+
+    <label for="tipo">Tipo di contribuente:</label>
+    <select id="tipo">
+      <option value="ordinario">Ditta individuale (regime ordinario)</option>
+      <option value="forfettario">Ditta individuale (regime forfettario)</option>
+      <option value="professionista">Professionista</option>
+    </select>
+
+    <button onclick="calcolaTasse()">Calcola</button>
+
+    <div id="risultato-irpef" class="risultato"></div>
+    <div class="box" id="concordato-box"></div>
+    <canvas id="graficoIRPEF" width="400" height="180"></canvas>
+    <button onclick="window.print()">🖨️ Stampa / Salva in PDF</button>
+  </div>
+
+  <script>
+    let grafico;
+    const euro = val => val.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+
+    function calcolaTasse() {
+      const reddito = parseFloat(document.getElementById('reddito-imponibile').value);
+      const redditoINPS = parseFloat(document.getElementById('reddito-inps').value) || reddito;
+      const tipo = document.getElementById('tipo').value;
+
+      if (isNaN(reddito) || reddito < 0) {
+        document.getElementById('risultato-irpef').innerHTML = "⚠️ Inserisci un reddito valido.";
+        return;
+      }
+
+      let irpef = 0, addReg = 0, addCom = 0, inps = 0, netto = 0;
+
+      // Calcolo ordinario
+      if (tipo === "ordinario" || tipo === "professionista") {
+        if (reddito <= 28000) {
+          irpef = reddito * 0.23;
+        } else if (reddito <= 50000) {
+          irpef = (28000 * 0.23) + ((reddito - 28000) * 0.35);
+        } else {
+          irpef = (28000 * 0.23) + (22000 * 0.35) + ((reddito - 50000) * 0.43);
+        }
+        addReg = reddito * 0.015;
+        addCom = reddito * 0.008;
+        inps = tipo === "ordinario" ? redditoINPS * 0.24 : redditoINPS * 0.25;
+        netto = reddito - (irpef + addReg + addCom + inps);
+
+      } else if (tipo === "forfettario") {
+        const base = reddito * 0.78;
+        irpef = base * 0.15;
+        inps = base * 0.24;
+        netto = reddito - (irpef + inps);
+      }
+
+      const totaleImposte = irpef + addReg + addCom + inps;
+
+      // Calcolo concordato biennale (flat tax 15% sul reddito concordato)
+      const concordatoIrpef = reddito * 0.15;
+      const concordatoInps = redditoINPS * 0.24;
+      const concordatoTotale = concordatoIrpef + concordatoInps;
+      const nettoConcordato = reddito - concordatoTotale;
+
+      // Output dettagliato
+      document.getElementById('risultato-irpef').innerHTML = `
+        🔎 <strong>Tassazione Ordinaria</strong><br>
+        💼 Reddito Fiscale: ${euro(reddito)}<br>
+        🧾 Reddito INPS: ${euro(redditoINPS)}<br>
+        💰 IRPEF: ${euro(irpef)}<br>
+        🏛️ Addizionale Regionale: ${euro(addReg)}<br>
+        🏙️ Addizionale Comunale: ${euro(addCom)}<br>
+        👷‍♂️ INPS: ${euro(inps)}<br>
+        📊 Totale Imposte: ${euro(totaleImposte)}<br>
+        ✅ Reddito Netto: ${euro(netto)}
+      `;
+
+      document.getElementById('concordato-box').innerHTML = `
+        📘 <strong>Ipotesi Concordato Biennale</strong><br>
+        💰 Imposta sostitutiva 15%: ${euro(concordatoIrpef)}<br>
+        👷‍♂️ INPS: ${euro(concordatoInps)}<br>
+        📊 Totale Imposte Concordato: ${euro(concordatoTotale)}<br>
+        ✅ Reddito Netto Concordato: ${euro(nettoConcordato)}
+      `;
+
+      const dati = {
+        labels: ['Reddito', 'IRPEF', 'INPS', 'Netto'],
+        datasets: [{
+          label: 'Tassazione Ordinaria',
+          data: [reddito, irpef, inps, netto],
+          backgroundColor: ['#4e73df', '#e74a3b', '#f6c23e', '#1cc88a']
+        }, {
+          label: 'Concordato Biennale',
+          data: [reddito, concordatoIrpef, concordatoInps, nettoConcordato],
+          backgroundColor: ['#c9c9c9', '#a93226', '#bb8fce', '#58d68d']
+        }]
+      };
+
+      const config = {
+        type: 'bar',
+        data: dati,
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Confronto Tassazione Ordinaria vs Concordato'
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return value.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+                }
+              }
+            }
+          }
+        }
+      };
+
+      if (grafico) grafico.destroy();
+      grafico = new Chart(document.getElementById('graficoIRPEF'), config);
+    }
+  </script>
+</body>
+</html>
