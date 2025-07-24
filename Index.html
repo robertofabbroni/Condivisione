@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulazione Tassazione Attività (Regione Puglia)</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 40px; }
+    .container { background: #fff; padding: 30px; border-radius: 10px; max-width: 900px; margin: auto; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+    h2 { color: #2e3c55; }
+    label, input, select, button { display: block; width: 100%; margin-bottom: 15px; font-size: 1rem; }
+    input, select { padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+    button { background-color: #2e3c55; color: #fff; padding: 12px; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background-color: #1d273a; }
+    .risultato, .box { font-size: 1.05rem; font-weight: bold; color: #2e3c55; margin-top: 20px; }
+    canvas { margin-top: 30px; }
+    .box { padding: 15px; background-color: #e8f0fe; border-left: 5px solid #4e73df; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Simulazione Tassazione Attività (Regione Puglia)</h2>
+    <p>Inserisci i dati per stimare la tassazione in base al regime fiscale e confrontare con il concordato biennale.</p>
+
+    <label for="reddito-fiscale">Reddito Imponibile Fiscale (€):</label>
+    <input type="number" id="reddito-fiscale" placeholder="Es. 50000">
+
+    <label for="reddito-inps">Reddito Imponibile INPS (€):</label>
+    <input type="number" id="reddito-inps" placeholder="Es. 40000">
+
+    <label for="forma">Forma Giuridica:</label>
+    <select id="forma">
+      <option value="ordinario">Ditta individuale (regime ordinario)</option>
+      <option value="forfettario">Ditta individuale (regime forfettario)</option>
+      <option value="professionista">Professionista</option>
+      <option value="snc">Società di persone (SNC/SAS)</option>
+      <option value="srl">Società di capitali (SRL/SPA)</option>
+    </select>
+
+    <button onclick="calcola()">Calcola</button>
+    <div id="risultato" class="risultato"></div>
+    <div id="concordato" class="box"></div>
+    <canvas id="grafico" width="400" height="200"></canvas>
+    <button onclick="window.print()">🖨️ Stampa / Salva PDF</button>
+  </div>
+
+<script>
+let grafico;
+const euro = val => val.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
+
+function calcola() {
+  const reddito = parseFloat(document.getElementById("reddito-fiscale").value);
+  const redditoINPS = parseFloat(document.getElementById("reddito-inps").value) || reddito;
+  const forma = document.getElementById("forma").value;
+
+  if (isNaN(reddito) || reddito <= 0) {
+    document.getElementById("risultato").innerHTML = "Inserisci un reddito valido.";
+    return;
+  }
+
+  let irpef = 0, ires = 0, irap = 0, addReg = 0, addCom = 0, inps = 0, netto = 0, dividendi = 0, ritenuta = 0;
+
+  if (forma === "ordinario" || forma === "professionista") {
+    if (reddito <= 28000) irpef = reddito * 0.23;
+    else if (reddito <= 50000) irpef = 28000 * 0.23 + (reddito - 28000) * 0.35;
+    else irpef = 28000 * 0.23 + 22000 * 0.35 + (reddito - 50000) * 0.43;
+
+    addReg = reddito * 0.015;
+    addCom = reddito * 0.008;
+    inps = forma === "ordinario" ? redditoINPS * 0.24 : redditoINPS * 0.25;
+    netto = reddito - (irpef + addReg + addCom + inps);
+
+  } else if (forma === "forfettario") {
+    const base = reddito * 0.78;
+    irpef = base * 0.15;
+    inps = base * 0.24;
+    netto = reddito - (irpef + inps);
+
+  } else if (forma === "snc") {
+    irpef = reddito * 0.30;
+    inps = redditoINPS * 0.24;
+    netto = reddito - (irpef + inps);
+
+  } else if (forma === "srl") {
+    ires = reddito * 0.24;
+    irap = reddito * 0.039;
+    dividendi = (reddito - ires - irap) * 0.7;
+    ritenuta = dividendi * 0.26;
+    netto = dividendi - ritenuta;
+  }
+
+  const totaleImposte = irpef + ires + irap + addReg + addCom + inps + ritenuta;
+
+  let out = `📌 Reddito Fiscale: ${euro(reddito)}<br>`;
+  if (forma === "srl") {
+    out += `🏛️ IRES: ${euro(ires)}<br>🏭 IRAP: ${euro(irap)}<br>💸 Dividendi (70%): ${euro(dividendi)}<br>🧾 Ritenuta 26%: ${euro(ritenuta)}<br>`;
+  } else {
+    out += `💰 IRPEF: ${euro(irpef)}<br>`;
+    if (forma !== "forfettario") {
+      out += `📍 Addizionale Regionale: ${euro(addReg)}<br>📍 Addizionale Comunale: ${euro(addCom)}<br>`;
+    }
+  }
+  out += `👷 INPS: ${euro(inps)}<br>`;
+  out += `📊 Totale Imposte: ${euro(totaleImposte)}<br>`;
+  out += `✅ Reddito Netto: ${euro(netto)}`;
+  document.getElementById("risultato").innerHTML = out;
+
+  // Concordato
+  const flat = reddito * 0.15;
+  const inpsFlat = redditoINPS * 0.24;
+  const nettoFlat = reddito - flat - inpsFlat;
+  document.getElementById("concordato").innerHTML =
+    `📘 Concordato Biennale:<br>💰 Flat Tax 15%: ${euro(flat)}<br>👷 INPS: ${euro(inpsFlat)}<br>📊 Totale: ${euro(flat + inpsFlat)}<br>✅ Netto: ${euro(nettoFlat)}`;
+
+  // Grafico
+  const dati = {
+    labels: ['Reddito', 'Imposte', 'Netto'],
+    datasets: [
+      {
+        label: 'Ordinario',
+        data: [reddito, totaleImposte, netto],
+        backgroundColor: ['#4e73df', '#e74a3b', '#1cc88a']
+      },
+      {
+        label: 'Concordato',
+        data: [reddito, flat + inpsFlat, nettoFlat],
+        backgroundColor: ['#aab7b8', '#ba4a00', '#58d68d']
+      }
+    ]
+  };
+
+  const config = {
+    type: 'bar',
+    data: dati,
+    options: {
+      responsive: true,
+      plugins: { title: { display: true, text: 'Confronto Tassazione' } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: val => val.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' })
+          }
+        }
+      }
+    }
+  };
+
+  if (grafico) grafico.destroy();
+  grafico = new Chart(document.getElementById('grafico'), config);
+}
+</script>
+</body>
+</html>
